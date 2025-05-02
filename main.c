@@ -633,12 +633,12 @@ int main(int argc, char** argv) {
  int fd = atoi(fd_s);
  if(scan_for_device_from_fd(fd)) {
  printf("Incorrect device\n");
- return;
+ return 0; 
  }
  } else {
  if(scan_for_device() !=0) {
  printf("No device found\n");
- return;
+ return 0;
  }
  }
 
