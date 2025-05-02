@@ -183,7 +183,7 @@ int scan_for_device() {
  libusb_free_device_list(devs,1);
     
  if (found) {
- return0;
+ return 0;
  } else {
  return 1;
  };
