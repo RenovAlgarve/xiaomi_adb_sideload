@@ -10,18 +10,18 @@
 #include <BASE64/base64.h>
 #include <MD5/md5.h>
 
-#define ADB_CLASS0xff
-#define ADB_SUB_CLASS0x42
-#define ADB_PROTOCOL_CODE1
-#define ADB_CONNECT0x4E584E43
-#define ADB_VERSION0x01000001
-#define ADB_OPEN0x4E45504F
-#define ADB_OKAY0x59414B4F
-#define ADB_WRTE0x45545257
-#define ADB_CLSE0x45534C43
-#define ADB_MAX_DATA1024 *1024 //1 MB
-#define CHUNK_SIZE2048
-#define ADB_SIDELOAD_CHUNK_SIZE1024 *64
+#define ADB_CLASS 0xff
+#define ADB_SUB_CLASS 0x42
+#define ADB_PROTOCOL_CODE 1
+#define ADB_CONNECT 0x4E584E43
+#define ADB_VERSION 0x01000001
+#define ADB_OPEN 0x4E45504F
+#define ADB_OKAY 0x59414B4F
+#define ADB_WRTE 0x45545257
+#define ADB_CLSE 0x45534C43
+#define ADB_MAX_DATA 1024 *1024 //1 MB
+#define CHUNK_SIZE 2048
+#define ADB_SIDELOAD_CHUNK_SIZE 1024 *64
 
 libusb_context *ctx;
 libusb_device_handle *dev_handle;
