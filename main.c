@@ -581,7 +581,7 @@ int start_sideload(const char *sideload_file) {
  printf("Failed to allocate memory\n");
  return 1;
 }
-
+}
 int main(int argc, char** argv) {
  int opt;
  bool format_data = false;
