@@ -581,6 +581,7 @@ int start_sideload(const char *sideload_file) {
  printf("Failed to allocate memory\n");
  return 1;
 }
+}
 
 int main(int argc, char** argv) {
  int opt;
@@ -610,11 +611,11 @@ int main(int argc, char** argv) {
  break;
 	default:
 	printUsage(argv[0]);
-	return;
+	return 1;
 
  if(optind ==1) {
  printUsage(argv[0]);
- return;
+ return 1;
  }
 
  codename = (char *)malloc(64);
