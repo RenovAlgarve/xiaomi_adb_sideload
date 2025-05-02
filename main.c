@@ -71,14 +71,14 @@ int check_device(libusb_device *dev) {
  int r = libusb_get_device_descriptor(dev, &desc);
  if (r != LIBUSB_SUCCESS) {
  printf("Failed to get device descriptor\n");
- return1;
+ return 1;
  }
 
  struct libusb_config_descriptor *configs;
  r = libusb_get_active_config_descriptor(dev, &configs);
  if (r != LIBUSB_SUCCESS) {
  printf("Failed to get active config descriptor\n");
- return1;
+ return 1;
  }
 
  bulk_in = -1;
@@ -118,19 +118,19 @@ int check_device(libusb_device *dev) {
  }
 
  if(bulk_out != -1 && bulk_in != -1) {
- return0;
+ return 0;
  }
  }
  }
 
- return1;
+ return 1;
 }
 
 int scan_for_device_from_fd(int fd) {
  int r = libusb_init(&ctx);
  if (r != LIBUSB_SUCCESS) {
  printf("Failed to init libusb\n");
- return1;
+ return 1;
  }
  libusb_set_option(NULL, LIBUSB_OPTION_NO_DEVICE_DISCOVERY);
  libusb_wrap_sys_device(ctx, (intptr_t) fd, &dev_handle);
@@ -140,17 +140,17 @@ int scan_for_device_from_fd(int fd) {
  r = libusb_claim_interface(dev_handle, interface_num);
  if(r != LIBUSB_SUCCESS) {
  printf("Failed to claim interface\n");
- return1;
+ return 1;
  }
  }
- return0;
+ return 0;
 }
 
 int scan_for_device() {
  int r = libusb_init(&ctx);
  if (r != LIBUSB_SUCCESS) {
  printf("Failed to init libusb\n");
- return1;
+ return 1;
  }
 
  libusb_device **devs= NULL;
@@ -158,7 +158,7 @@ int scan_for_device() {
  ssize_t cnt = libusb_get_device_list(ctx, &devs);
  if (cnt <0) {
  printf("Failed to get device list\n");
- return1;
+ return 1;
  }
 
  int i =0;
@@ -169,12 +169,12 @@ int scan_for_device() {
  r = libusb_open(dev, &dev_handle);
  if(r != LIBUSB_SUCCESS) {
  printf("Failed to open usb device\n");
- return1;
+ return 1;
  }
  r = libusb_claim_interface(dev_handle, interface_num);
  if(r != LIBUSB_SUCCESS) {
  printf("Failed to claim interface\n");
- return1;
+ return 1;
  }
  break;
  }
@@ -185,7 +185,7 @@ int scan_for_device() {
  if (found) {
  return0;
  } else {
- return1;
+ return 1;
  };
 }
 
@@ -219,30 +219,30 @@ int send_command(uint32_t cmd, uint32_t arg0, uint32_t arg1, void *data, int dat
  pkt.magic = cmd ^0xffffffff;
 
  if(usb_write(&pkt, sizeof(pkt)) == -1) {
- return1;
+ return 1;
  } 
 
  if(datalen >0) {
  if(usb_write(data, datalen) == -1) {
- return1;
+ return 1;
  }
  }
- return0;
+ return 0;
 }
 
 int recv_packet(adb_usb_packet *pkt, void* data, int *data_len) {
  if(!usb_read(pkt, sizeof(adb_usb_packet))) {
- return1;
+ return 1;
  }
 
  if(pkt->len >0) {
  if(!usb_read(data, pkt->len)) {
- return1;
+ return 1;
  }
  }
 
  *data_len = pkt->len;
- return0;
+ return 0;
 }
 
 int send_recovery_commands(char* command, char* response) {
@@ -254,7 +254,7 @@ int send_recovery_commands(char* command, char* response) {
 
  if(send_command(ADB_OPEN,1,0, cmd, cmd_len)) {
  printf("device not accept connect request\n");
- return1;
+ return 1;
  }
 
  adb_usb_packet pkt;
@@ -264,7 +264,7 @@ int send_recovery_commands(char* command, char* response) {
 
  if(recv_packet(&pkt, response, &data_len)) {
  printf("Failed to get info from device\n");
- return1;
+ return 1;
  }
 
  response[data_len] =0;
@@ -272,14 +272,14 @@ int send_recovery_commands(char* command, char* response) {
  response[data_len -1] =0;
 
  recv_packet(&pkt, data, &data_len); 
- return0;
+ return 0;
 
 }
 
 int connect_device_read_info(bool read_info) {
  if(send_command(ADB_CONNECT, ADB_VERSION, ADB_MAX_DATA, "host::\x0",7)) {
  printf("device not accept connect request\n");
- return1;
+ return 1;
  }
 
  char buf[512];
@@ -289,7 +289,7 @@ int connect_device_read_info(bool read_info) {
  while (try_count >0) {
  if(recv_packet(&pkt, buf, &buf_len)) {
  printf("Failed to read response from device\n");
- return1;
+ return 1;
  }
  if(pkt.cmd == ADB_CONNECT) break;
  try_count--;
@@ -297,59 +297,59 @@ int connect_device_read_info(bool read_info) {
 
  if(try_count ==0) {
  printf("Device doesn't send correct response\n");
- return1;
+ return 1;
  }
 
  buf[buf_len] =0;
  if(memcmp(buf, "sideload::",10)){
- return1;
+ return 1;
  }
 
  if(!read_info) {
- return0;
+ return 0;
  }
 
  if(send_recovery_commands("getdevice:", codename)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getversion:", version)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getsn:", serial_num)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getcodebase:", codebase)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getbranch:", branch)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getlanguage:", lang)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getregion:", region)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
  if(send_recovery_commands("getromzone:", romzone)) {
  printf("Failed to execute getdevice");
- return1;
+ return 1;
  }
 
- return0;
+ return 0;
 }
 
 size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
@@ -370,9 +370,9 @@ int fileexists(const char *fname) {
  FILE *file;
  if ((file = fopen(fname, "r"))) {
  fclose(file);
- return1;
+ return 1;
  }
- return0;
+ return 0;
 }
 
 char* generate_md5_hash(char* filename) {
@@ -402,13 +402,13 @@ char* generate_md5_hash(char* filename) {
 int generate_firmware_sign(char* signfile) {
  if (signfile == NULL) {
  printf("Sign file name is NULL\n");
- return1;
+ return 1;
  }
 
  char* pkg_hash = generate_md5_hash(signfile);
  if (pkg_hash == NULL) {
  printf("Failed to generate MD5 hash\n");
- return1;
+ return 1;
  }
 
  const uint8_t key[16] = {0x6D,0x69,0x75,0x69,0x6F,0x74,0x61,0x76,0x61,0x6C,0x69,0x64,0x65,0x64,0x31,0x31};
@@ -455,14 +455,14 @@ int generate_firmware_sign(char* signfile) {
  char *post_buf = malloc(4096);
  if (post_buf == NULL) {
  printf("Failed to allocate memory\n");
- return1;
+ return 1;
  }
 
  char *json_post_data = curl_easy_escape(curl, out_buf, strlen(out_buf));
  if (json_post_data == NULL) {
  printf("Failed to allocate memory\n");
  free(post_buf);
- return1;
+ return 1;
  }
 
  sprintf(post_buf, "q=%s&t=&s=1", json_post_data);
@@ -480,7 +480,7 @@ int generate_firmware_sign(char* signfile) {
  printf("Failed to allocate memory\n");
  free(post_buf);
  curl_free(json_post_data);
- return1;
+ return 1;
  }
 
  req.buflen = CHUNK_SIZE;
@@ -543,7 +543,7 @@ int start_sideload(const char *sideload_file) {
  FILE *fp = fopen("validate.key", "r");
  if (fp == NULL) {
  printf("Failed to open file\n");
- return1;
+ return 1;
  }
 
  fseek(fp,0, SEEK_END);
@@ -553,7 +553,7 @@ int start_sideload(const char *sideload_file) {
  if (validate == NULL) {
  printf("Failed to allocate memory\n");
  fclose(fp);
- return1;
+ return 1;
  }
 
  fread(validate,1, validate_file_size, fp);
@@ -564,7 +564,7 @@ int start_sideload(const char *sideload_file) {
  if (fp == NULL) {
  printf("Failed to open file\n");
  free(validate);
- return1;
+ return 1;
  }
 
  fseek(fp,0, SEEK_END);
