@@ -400,142 +400,156 @@ char* generate_md5_hash(char* filename) {
 }
 
 int generate_firmware_sign(char* signfile) {
- if (signfile == NULL) {
- printf("Sign file name is NULL\n");
- return 1;
- }
+    const uint8_t key[16] = { 0x6D, 0x69, 0x75, 0x69, 0x6F, 0x74, 0x61, 0x76, 0x61, 0x6C, 0x69, 0x64, 0x65, 0x64, 0x31, 0x31};
+    const uint8_t iv[16] = { 0x30, 0x31, 0x30, 0x32, 0x30, 0x33, 0x30, 0x34, 0x30, 0x35, 0x30, 0x36, 0x30, 0x37, 0x30, 0x38};
 
- char* pkg_hash = generate_md5_hash(signfile);
- if (pkg_hash == NULL) {
- printf("Failed to generate MD5 hash\n");
- return 1;
- }
+    if (!fileexists(signfile)) {
+        printf("Firmware file not found: %s\n", signfile);
+        return 1;
+    }
 
- const uint8_t key[16] = {0x6D,0x69,0x75,0x69,0x6F,0x74,0x61,0x76,0x61,0x6C,0x69,0x64,0x65,0x64,0x31,0x31};
- const uint8_t iv[16] = {0x30,0x31,0x30,0x32,0x30,0x33,0x30,0x34,0x30,0x35,0x30,0x36,0x30,0x37,0x30,0x38};
+    char* pkg_hash = generate_md5_hash(signfile);
+    if (!pkg_hash) {
+        printf("Failed to generate MD5 hash\n");
+        return 1;
+    }
 
- char json_request[1024];
+    char raw_json[2048];
+    snprintf(raw_json, sizeof(raw_json),
+        "{\n\t\"d\" : \"%s\",\n\t\"v\" : \"%s\",\n\t\"c\" : \"%s\",\n\t\"b\" : \"%s\",\n\t\"sn\" : \"%s\",\n\t\"r\" : \"GL\",\n\t\"l\" : \"en-US\",\n\t\"f\" : \"1\",\n\t\"id\" : \"\",\n\t\"options\" : {\n\t\t\"zone\" : %s\n\t},\n\t\"pkg\" : \"%s\"\n}",
+        codename, version, codebase, branch, serial_num, romzone, pkg_hash
+    );
+    free(pkg_hash);
 
- char* romzone_str = malloc(strlen(romzone) +2);
- sprintf(romzone_str, "%s", romzone);
+    int len = strlen(raw_json);
+    int padded_len = len + (16 - (len % 16));
+    char *padded_json = malloc(padded_len);
+    if (!padded_json) {
+        printf("Memory alloc fail\n");
+        return 1;
+    }
+    memcpy(padded_json, raw_json, len);
 
- memset(json_request,0,1024);
- sprintf(json_request, "{\n\t\"d\" : \"%s\",\n\t\"v\" : \"%s\",\n\t\"c\" : \"%s\",\n\t\"b\" : \"%s\",\n\t\"sn\" : \"%s\",\n\t\"r\" : \"GL\",\n\t\"l\" : \"en-US\",\n\t\"f\" : \"1\",\n\t\"id\" : \"\",\n\t\"options\" : {\n\t\t\"zone\" : %s\n\t},\n\t\"pkg\" : \"%s\"\n}", codename, version, codebase, branch, serial_num, romzone_str, pkg_hash);
+    uint8_t pad = 16 - (len % 16);
+    for (int i = 0; i < pad; i++) {
+        padded_json[len + i] = pad;
+    }
 
- free(pkg_hash);
- free(romzone_str);
+    struct AES_ctx ctx;
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_CBC_encrypt_buffer(&ctx, (uint8_t *)padded_json, padded_len);
 
- int len = strlen(json_request);
- int mod_len =16 - (len %16);
- if (mod_len >0) {
- for(int i =0; i < mod_len; i++) 
- json_request[len + i] = (char)mod_len;
-        
- len = len + mod_len;
- }
+    int b64_len = b64_encodedLength(padded_len);
+    char *b64_buf = malloc(b64_len + 1);
+    if (!b64_buf) {
+        free(padded_json);
+        return 1;
+    }
+    b64_encode((uint8_t *)padded_json, padded_len, (uint8_t *)b64_buf);
+    b64_buf[b64_len] = 0;
+    free(padded_json);
 
- struct AES_ctx ctx;
- AES_init_ctx_iv(&ctx, key, iv);
- AES_CBC_encrypt_buffer(&ctx, (uint8_t *)json_request, len);
+    curl_global_init(CURL_GLOBAL_ALL);
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        printf("CURL init failed\n");
+        free(b64_buf);
+        return 1;
+    }
 
- int b64_len = b64_encodedLength(len);
- char out_buf[b64_len];
- memset(out_buf,0, b64_len);
- b64_encode((uint8_t *)json_request, len, (uint8_t *)out_buf);
+    struct curl_slist* headers = NULL;
+    headers = curl_slist_append(headers, "clientId: MITUNES");
+    headers = curl_slist_append(headers, "Connection: Keep-Alive");
+    headers = curl_slist_append(headers, "Accept-Encoding: identity");
+    headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
 
- curl_global_init(CURL_GLOBAL_ALL);
- CURL* curl = curl_easy_init();
+    char *json_post_data = curl_easy_escape(curl, b64_buf, strlen(b64_buf));
+    free(b64_buf);
 
- struct curl_slist* headers = NULL;
- headers = curl_slist_append(headers, "clientId: MITUNES");
- headers = curl_slist_append(headers, "Connection: Keep-Alive");
- headers = curl_slist_append(headers, "Accept-Encoding: identity");
- headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
+    char *post_buf = malloc(4096);
+    if (!post_buf) {
+        curl_free(json_post_data);
+        curl_easy_cleanup(curl);
+        return 1;
+    }
 
- char *post_buf = malloc(4096);
- if (post_buf == NULL) {
- printf("Failed to allocate memory\n");
- return 1;
- }
+    snprintf(post_buf, 4096, "q=%s&t=&s=1", json_post_data);
+    get_request req = {.buffer = malloc(CHUNK_SIZE), .len = 0, .buflen = CHUNK_SIZE};
+    if (!req.buffer) {
+        free(post_buf);
+        curl_free(json_post_data);
+        curl_easy_cleanup(curl);
+        return 1;
+    }
 
- char *json_post_data = curl_easy_escape(curl, out_buf, strlen(out_buf));
- if (json_post_data == NULL) {
- printf("Failed to allocate memory\n");
- free(post_buf);
- return 1;
- }
+    curl_easy_setopt(curl, CURLOPT_URL, "http://update.miui.com/updates/miotaV3.php");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "MiTunes_UserAgent_v3.0");
+    curl_easy_setopt(curl, CURLOPT_POST, 1);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_buf);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &req);
 
- sprintf(post_buf, "q=%s&t=&s=1", json_post_data);
+    CURLcode res = curl_easy_perform(curl);
+    long status_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 
- get_request req = {.buffer = NULL, .len =0, .buflen =0};
+    int result = 1;
 
- curl_easy_setopt(curl, CURLOPT_URL, "http://update.miui.com/updates/miotaV3.php");
- curl_easy_setopt(curl, CURLOPT_USERAGENT, "MiTunes_UserAgent_v3.0");
- curl_easy_setopt(curl, CURLOPT_POST,1);
- curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_buf);
- curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    if (res == CURLE_OK && status_code == 200) {
+        int dec_len;
+        curl_free(json_post_data);
+        json_post_data = curl_easy_unescape(curl, req.buffer, req.len, &dec_len);
 
- req.buffer = malloc(CHUNK_SIZE);
- if (req.buffer == NULL) {
- printf("Failed to allocate memory\n");
- free(post_buf);
- curl_free(json_post_data);
- return 1;
- }
+        char *dec_buf = malloc(dec_len + 1);
+        memset(dec_buf, 0, dec_len + 1);
+        b64_decode((uint8_t *)json_post_data, dec_len, (uint8_t *)dec_buf);
 
- req.buflen = CHUNK_SIZE;
- curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
- curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&req);
+        AES_init_ctx_iv(&ctx, key, iv);
+        AES_CBC_decrypt_buffer(&ctx, (uint8_t *)dec_buf, dec_len);
 
- curl_easy_perform(curl);
-    
- int result =1;
- long status_code;
- curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
- if (status_code ==200) {
- curl_free(json_post_data);
- json_post_data = curl_easy_unescape(curl, req.buffer, req.len, &len);
-        
- memset(post_buf,0,4096);
- b64_len = b64_decode((uint8_t *)json_post_data, len,(uint8_t*)post_buf);
- AES_init_ctx_iv(&ctx, key, iv);
- AES_CBC_decrypt_buffer(&ctx, (uint8_t *)post_buf, b64_len);
+        uint8_t unpad = dec_buf[dec_len - 1];
+        if (unpad > 16) goto cleanup;
 
- // unpad
- post_buf[b64_len - post_buf[b64_len -1]] =0;
+        dec_buf[dec_len - unpad] = 0;
 
- json_t mem[64];
- json_t const* json = json_create(post_buf, mem, sizeof mem / sizeof *mem);
- if(!json) {
- printf("Failed to parse json\n");
- goto out;
- } 
+        json_t mem[64];
+        const json_t *json = json_create(dec_buf, mem, sizeof mem / sizeof *mem);
+        if (!json) {
+            printf("JSON parse failed\n");
+            goto cleanup;
+        }
 
- json_t const* pkgRom = json_getProperty(json, "PkgRom");
- if(!pkgRom) {
- printf("Failed to get firmware validate\n");
- goto out;
- }
+        const json_t *pkgRom = json_getProperty(json, "PkgRom");
+        if (!pkgRom) {
+            printf("Missing PkgRom field\n");
+            goto cleanup;
+        }
 
- char const* validate = json_getPropertyValue(pkgRom, "Validate");
- if(!validate) {
- printf("Failed to get validate\n");
- goto out;
- }
- result =0;
- printf("Sign generated successfully\n");
- FILE* fp = fopen("validate.key", "w");
- fwrite(validate,1, strlen(validate), fp);
- fclose(fp);
- printf("Validation file save to : validate.key\n");
- }
-out:
- curl_free(json_post_data);
- free(post_buf);
- curl_easy_cleanup(curl);
- curl_slist_free_all(headers);
- free(req.buffer);
- return result;
+        const char *validate = json_getPropertyValue(pkgRom, "Validate");
+        if (!validate) {
+            printf("Missing Validate field\n");
+            goto cleanup;
+        }
+
+        FILE *fp = fopen("validate.key", "w");
+        fwrite(validate, 1, strlen(validate), fp);
+        fclose(fp);
+        printf("Sign generated and saved to validate.key\n");
+        result = 0;
+
+    } else {
+        printf("Server error or CURL failure: %s\n", curl_easy_strerror(res));
+    }
+
+cleanup:
+    curl_free(json_post_data);
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(headers);
+    free(post_buf);
+    free(req.buffer);
+
+    return result;
 }
 
 int start_sideload(const char *sideload_file) {
